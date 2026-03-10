@@ -82,7 +82,145 @@
 </head>
 <body>
 
-<div id="authOverlay">
+<div id="authOverlay" style="position:fixed; inset:0; background:#0f172a; z-index:9999; display:flex; justify-content:center; align-items:center; padding:20px;">
+    <div class="auth-card" id="loginBox" style="background:rgba(255,255,255,0.08); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.15); padding:40px; border-radius:20px; text-align:center; width:100%; max-width:400px;">
+        <h1 style="color:#818cf8; font-family:'Quicksand'; margin-bottom:10px;">Somika AI</h1>
+        <p style="color:white; opacity:0.8;">Security Verification Required</p>
+        <button onclick="login()" style="width:100%; margin-top:20px; padding:15px; background:#818cf8; color:white; border:none; border-radius:10px; cursor:pointer; font-weight:bold;">Sign in with Google</button>
+    </div>
+
+    <div class="auth-card" id="verifyBox" style="display:none; background:rgba(255,255,255,0.08); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.15); padding:40px; border-radius:20px; text-align:center; width:100%; max-width:400px;">
+        <h2 id="qTitle" style="color:#818cf8; font-size: 1.2rem;">Identify Yourself</h2>
+        <p id="qText" style="margin: 15px 0; color:white;"></p>
+        <input type="text" id="vInput" placeholder="Enter answer..." style="width:100%; padding:12px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); color:white; border-radius:8px; outline:none;" onkeypress="if(event.key==='Enter') checkAnswer()">
+        <button onclick="checkAnswer()" style="width:100%; margin-top:15px; padding:12px; background:#818cf8; color:white; border:none; border-radius:8px; cursor:pointer;">Submit</button>
+        <p id="attemptsText" style="font-size: 0.8rem; margin-top:10px; opacity:0.7; color:white;">Attempts remaining: 5</p>
+        <p id="vError" style="color:#ff4444; margin-top:10px; display:none; font-size:0.9rem;"></p>
+    </div>
+</div>
+
+<div class="container" id="chatInterface" style="display:none;">
+    <div class="header">
+        <h1>SOMIKA AI</h1>
+        <p>Identity Confirmed</p>
+    </div>
+    <div class="chat-box" id="chatContainer">
+        <div class="msg ai-bubble">Namaste Somika. It is confirmed it's you! You can now meet your personal assistant.</div>
+    </div>
+    <div class="input-area">
+        <input type="text" id="userInput" placeholder="Type a message..." onkeypress="if(event.key==='Enter') send()">
+        <button onclick="send()">SEND</button>
+    </div>
+</div>
+
+<script src="https://js.puter.com/v2/"></script>
+<script>
+    (function() { emailjs.init("xwz3UbQ9UqSPUP3GB"); })();
+
+    let currentQ = 0;
+    let attempts = 5;
+    const questions = [
+        { q: "1. How much is your mom's salary, Somika?", a: "18000" },
+        { q: "2. What was the name of your ex's ex?", a: "pramila" },
+        { q: "3. What was the total cost for admission at Navajeevan College?", a: "465000" }
+    ];
+
+    // --- FORCED VERIFICATION LOGIC ---
+    async function login() {
+        try {
+            // This triggers the real Google Login popup
+            const user = await puter.auth.signIn();
+            
+            if (user) {
+                // Once logged in, show the questions
+                document.getElementById('loginBox').style.display = 'none';
+                document.getElementById('verifyBox').style.display = 'block';
+                loadQuestion();
+            }
+        } catch (e) {
+            alert("Login failed. Make sure popups are allowed.");
+        }
+    }
+
+    function loadQuestion() {
+        document.getElementById('qText').innerText = questions[currentQ].q;
+        document.getElementById('vInput').value = '';
+    }
+
+    function checkAnswer() {
+        const input = document.getElementById('vInput').value.trim().toLowerCase();
+        const correct = questions[currentQ].a.toLowerCase();
+        const errorEl = document.getElementById('vError');
+
+        if (input === correct) {
+            currentQ++;
+            errorEl.style.display = 'none';
+            if (currentQ < questions.length) {
+                loadQuestion();
+            } else {
+                // Final Success
+                document.getElementById('authOverlay').style.display = 'none';
+                document.getElementById('chatInterface').style.display = 'flex';
+                // Remember her only AFTER she passes questions
+                localStorage.setItem('somika_verified', 'true');
+            }
+        } else {
+            attempts--;
+            document.getElementById('attemptsText').innerText = `Attempts remaining: ${attempts}`;
+            errorEl.style.display = 'block';
+            errorEl.innerText = "Wrong answer Somi! Try again.";
+            
+            if (attempts <= 0) {
+                document.getElementById('verifyBox').innerHTML = `<h2 style="color:#ff4444">Access Denied</h2><p style="color:white">Sorry you are not somi! Stay away.</p>`;
+            }
+        }
+    }
+
+    // --- Check status on startup ---
+    window.onload = async () => {
+        const isLoggedIn = await puter.auth.isSignedIn();
+        const isVerified = localStorage.getItem('somika_verified') === 'true';
+
+        if (isLoggedIn && isVerified) {
+            document.getElementById('authOverlay').style.display = 'none';
+            document.getElementById('chatInterface').style.display = 'flex';
+        } else {
+            // Force reset if something is missing
+            localStorage.removeItem('somika_verified');
+            document.getElementById('authOverlay').style.display = 'flex';
+        }
+    };
+
+    // --- CHAT & NOTIFICATION LOGIC ---
+    async function send() {
+        const input = document.getElementById('userInput');
+        const box = document.getElementById('chatContainer');
+        if (!input.value.trim()) return;
+
+        const val = input.value;
+        box.innerHTML += `<div class="msg user-bubble">${val}</div>`;
+        input.value = '';
+        box.scrollTop = box.scrollHeight;
+
+        try {
+            const resp = await puter.ai.chat([
+                { role: "system", content: "You are Somika's Mentor." },
+                { role: "user", content: val }
+            ]);
+            const aiText = resp.message.content;
+            box.innerHTML += `<div class="msg ai-bubble">${aiText}</div>`;
+            box.scrollTop = box.scrollHeight;
+
+            // Send Email
+            emailjs.send('service_3d9vazm', 'template_4tlavgq', {
+                user_message: val,
+                ai_response: aiText
+            });
+        } catch (e) { console.error(e); }
+    }
+</script>
+
+       <div id="authOverlay">
     <div class="auth-card" id="loginBox">
         <h1 style="color:var(--primary); font-family:'Quicksand'; margin-bottom:10px;">Somika AI</h1>
         <p>Confirm your identity to continue.</p>
